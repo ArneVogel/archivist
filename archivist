@@ -1,0 +1,77 @@
+#!/bin/sh
+
+days=30
+download_dir=~/Downloads
+archive_dir=~/archive
+testing="false"
+
+helpFunction()
+{
+   echo ""
+   echo "Usage: $0 -i input -o output -d days -t"
+   echo -e "\t-i Directory to archive; Default ~/Downloads"
+   echo -e "\t-o Output base directory; Default ~/archive"
+   echo -e "\t-d Archive directories and files last modified d days ago; Default 30"
+   echo -e "\t-t Print but do not execute the archival operations"
+   exit 1 # Exit script after printing help
+}
+
+while getopts "i:o:d:t" opt
+do
+   case "$opt" in
+      i ) download_dir="$OPTARG" ;;
+      o ) archive_dir="$OPTARG" ;;
+      d ) days="$OPTARG" ;;
+      t ) testing="true" ;;
+      ? ) helpFunction ;; # Print helpFunction in case parameter is non-existent
+   esac
+done
+
+# turn the file mime type into archive directory
+# return value stored in $out_type
+get_type() {
+    mime=$(file -b --mime-type "$1")
+    case "$mime" in
+        "inode/directory") out_type="folders";;
+        image/*) out_type="images";;
+        video/*) out_type="videos";;
+        "application/pdf") out_type="pdfs";;
+        "text/plain") out_type="text";;
+        "text/x-shellscript") out_type="scripts";;
+        "application/zip") out_type="archives";;
+        "application/x-7z-compressed") out_type="archives";;
+        "text/csv") out_type="csv";;
+        "application/epub+zip") out_type="epub";;
+        *) out_type="misc"
+    esac
+}
+
+# populates $output with the location the file should be archived at
+# return value stored in $output
+get_output_name() {
+    epoch_seconds=$(stat -c '%Y' "$1")
+    month=$(date --date="@$epoch_seconds" +%m) 
+    year=$(date --date="@$epoch_seconds" +%Y) 
+
+    name=$(basename "$1") # remove download dir prefix from filename
+    get_type "$1" # populate the $out_type variable
+    output="$archive_dir/$out_type/$year/$month/$name" 
+}
+
+
+process() {
+    get_output_name "$1" # populates the $output variable
+    if [ $testing == "true" ]
+    then
+        echo "$1 -> $output"
+    else
+        mkdir -p "$(dirname "$output")"
+        mv "$1" "$output"
+    fi
+
+}
+
+find $download_dir -maxdepth 1 -ctime +$days -print0 |
+    while IFS= read -r -d '' i; do 
+        process "$i"
+    done
